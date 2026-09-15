@@ -38,7 +38,8 @@ configure the OAuth consent screen, then create:
   signing certificate SHA-1 and SHA-256 fingerprints; and
 - a Web OAuth client used as Android's server client ID.
 
-Run the configured app with:
+The registered Web client ID is bundled as the default, so the configured app
+can be started with `flutter run`. A different deployment can override it with:
 
 ```shell
 flutter run --dart-define=GOOGLE_SERVER_CLIENT_ID=your-web-client-id

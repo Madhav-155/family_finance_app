@@ -32,6 +32,7 @@ class GoogleSheetsSyncService {
   static const _spreadsheetKey = 'household_spreadsheet_id';
   static const _serverClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue: '424931751635-0dvuphu0ir9lona5vf28uk8dnt9aomm5.apps.googleusercontent.com',
   );
   static const _scopes = [
     sheets.SheetsApi.spreadsheetsScope,
