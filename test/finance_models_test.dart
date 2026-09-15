@@ -7,6 +7,25 @@ void main() {
     expect(rupeesToMinor('invalid'), 0);
   });
 
+  test('finance dates remain date-only across time zones', () {
+    final date = DateTime(2026, 9);
+    final income = IncomeEntry(
+      id: 'income',
+      householdId: 'family',
+      createdBy: 'owner',
+      deviceId: 'phone',
+      createdAt: date,
+      updatedAt: date,
+      revision: 1,
+      deleted: false,
+      source: 'Salary',
+      amountMinor: 10000,
+      receivedDate: date,
+    );
+
+    expect(income.toMap()['received_date'], '2026-09-01');
+  });
+
   test('monthly snapshot computes cash flow without floating point', () {
     final now = DateTime.now();
     final expense = Expense(

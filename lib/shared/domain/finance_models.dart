@@ -12,6 +12,8 @@ String formatMoney(int minorUnits, {String locale = 'en_IN'}) =>
       decimalDigits: 0,
     ).format(minorUnits / 100);
 
+String formatDateOnly(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+
 abstract class SyncEntity {
   const SyncEntity({
     required this.id,
@@ -94,7 +96,7 @@ class Expense extends SyncEntity {
     'category': category,
     'paid_by': paidBy,
     'payment_mode': paymentMode,
-    'date': date.toUtc().toIso8601String(),
+    'date': formatDateOnly(date),
     'notes': notes,
   };
 }
@@ -136,7 +138,7 @@ class IncomeEntry extends SyncEntity {
     ...syncFields(),
     'source': source,
     'amount_minor': amountMinor,
-    'received_date': receivedDate.toUtc().toIso8601String(),
+    'received_date': formatDateOnly(receivedDate),
   };
 }
 
@@ -180,7 +182,7 @@ class Emi extends SyncEntity {
     ...syncFields(),
     'loan_name': loanName,
     'amount_minor': amountMinor,
-    'due_date': dueDate.toUtc().toIso8601String(),
+    'due_date': formatDateOnly(dueDate),
     'status': paid ? 'paid' : 'due',
   };
 }

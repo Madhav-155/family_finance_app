@@ -40,9 +40,10 @@ class AppDatabase {
     _database = await openDatabase(
       path.join(root, 'family_finance.db'),
       password: password,
-      version: 1,
+      version: 2,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
   }
 
@@ -188,6 +189,33 @@ class AppDatabase {
         'color': category.$4,
         'type': 'expense',
       });
+    }
+  }
+
+  Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion >= 2) return;
+    for (final entry in {
+      'expenses': 'date',
+      'income': 'received_date',
+      'emis': 'due_date',
+    }.entries) {
+      final rows = await db.query(entry.key, columns: ['id', entry.value]);
+      for (final row in rows) {
+        final stored = row[entry.value] as String?;
+        if (stored == null || !stored.contains('T')) continue;
+        final parsed = DateTime.tryParse(stored);
+        if (parsed == null) continue;
+        await db.update(
+          entry.key,
+          {entry.value: formatDateOnly(parsed.toLocal())},
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
     }
   }
 

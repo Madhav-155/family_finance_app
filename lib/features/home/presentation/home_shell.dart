@@ -71,11 +71,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         destinations: [
           NavigationDestination(
             icon: const Icon(LucideIcons.layoutDashboard),
-            label: strings.text('dashboard'),
+            label: strings.text('home'),
           ),
           NavigationDestination(
             icon: const Icon(LucideIcons.receiptText),
-            label: strings.text('transactions'),
+            label: strings.text('history'),
           ),
           NavigationDestination(
             icon: const Icon(LucideIcons.calendarClock),
