@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
+import '../core/time/ist_time.dart';
 import '../shared/domain/finance_models.dart';
 
 class AppDatabase {
@@ -40,7 +41,7 @@ class AppDatabase {
     _database = await openDatabase(
       path.join(root, 'family_finance.db'),
       password: password,
-      version: 2,
+      version: 3,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -197,7 +198,7 @@ class AppDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    if (oldVersion >= 2) return;
+    if (oldVersion >= 3) return;
     for (final entry in {
       'expenses': 'date',
       'income': 'received_date',
@@ -211,7 +212,11 @@ class AppDatabase {
         if (parsed == null) continue;
         await db.update(
           entry.key,
-          {entry.value: formatDateOnly(parsed.toLocal())},
+          {
+            entry.value: formatDateOnly(
+              IstTime.dateOnlyFromStoredInstant(parsed),
+            ),
+          },
           where: 'id = ?',
           whereArgs: [row['id']],
         );

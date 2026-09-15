@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
+import 'core/time/ist_time.dart';
 import 'database/app_database.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  IstTime.initialize();
   await AppDatabase.instance.initialize();
   runApp(const ProviderScope(child: FamilyFinanceApp()));
 }

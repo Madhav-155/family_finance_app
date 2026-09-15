@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/theme/app_theme.dart';
-import 'features/home/presentation/home_shell.dart';
+import 'features/onboarding/presentation/setup_gate.dart';
 import 'l10n/app_strings.dart';
 import 'shared/providers/app_providers.dart';
 
 final appRouter = GoRouter(
-  routes: [GoRoute(path: '/', builder: (context, state) => const HomeShell())],
+  routes: [
+    GoRoute(path: '/', builder: (context, state) => const HouseholdSetupGate()),
+  ],
 );
 
 class FamilyFinanceApp extends ConsumerWidget {

@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import '../../core/time/ist_time.dart';
+
 typedef JsonMap = Map<String, Object?>;
 
 int rupeesToMinor(String value) =>
@@ -12,7 +14,7 @@ String formatMoney(int minorUnits, {String locale = 'en_IN'}) =>
       decimalDigits: 0,
     ).format(minorUnits / 100);
 
-String formatDateOnly(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+String formatDateOnly(DateTime value) => IstTime.formatDateOnly(value);
 
 abstract class SyncEntity {
   const SyncEntity({
@@ -234,17 +236,17 @@ class FinanceSnapshot {
     this.income = const [],
     this.emis = const [],
     this.budgets = const [],
+    this.nowInstant,
   });
 
   final List<Expense> expenses;
   final List<IncomeEntry> income;
   final List<Emi> emis;
   final List<Budget> budgets;
+  final DateTime? nowInstant;
 
-  bool _thisMonth(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month;
-  }
+  bool _thisMonth(DateTime date) =>
+      IstTime.isCurrentMonth(date, nowInstant: nowInstant);
 
   int get monthlyExpenses => expenses
       .where((item) => !item.deleted && _thisMonth(item.date))

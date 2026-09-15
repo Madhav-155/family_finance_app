@@ -1,7 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 
+import '../core/time/ist_time.dart';
 import '../shared/domain/finance_models.dart';
 
 class NotificationService {
@@ -13,7 +12,7 @@ class NotificationService {
 
   Future<void> initialize() async {
     if (_initialized) return;
-    tz.initializeTimeZones();
+    IstTime.initialize();
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -29,18 +28,18 @@ class NotificationService {
 
   Future<void> scheduleEmiReminder(Emi emi) async {
     await initialize();
-    final reminder = DateTime(
-      emi.dueDate.year,
-      emi.dueDate.month,
-      emi.dueDate.day,
-      9,
+    final reminder = IstTime.at(
+      year: emi.dueDate.year,
+      month: emi.dueDate.month,
+      day: emi.dueDate.day,
+      hour: 9,
     ).subtract(const Duration(days: 1));
-    if (reminder.isBefore(DateTime.now())) return;
+    if (reminder.isBefore(IstTime.now())) return;
     await _plugin.zonedSchedule(
       id: emi.id.hashCode.abs() % 2147483647,
       title: 'EMI due tomorrow',
       body: '${emi.loanName} payment is due.',
-      scheduledDate: tz.TZDateTime.from(reminder, tz.local),
+      scheduledDate: reminder,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'emi_reminders',

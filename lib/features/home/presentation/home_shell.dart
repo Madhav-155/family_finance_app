@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/time/ist_time.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../onboarding/application/setup_controller.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../services/notification_service.dart';
 import '../../../shared/domain/finance_models.dart';
 import '../../../shared/providers/app_providers.dart';
 import '../../../sync/google_sheets_sync_service.dart';
+import '../../../sync/sync_contracts.dart';
 
 enum EntryKind { expense, income, emi, budget }
 
@@ -218,16 +221,12 @@ class DashboardPage extends ConsumerWidget {
                 const SizedBox(height: 8),
                 ...snapshot.expenses
                     .where(
-                      (item) =>
-                          !item.deleted &&
-                          DateUtils.isSameDay(item.date, DateTime.now()),
+                      (item) => !item.deleted && IstTime.isToday(item.date),
                     )
                     .take(5)
                     .map((item) => ExpenseTile(expense: item)),
                 if (!snapshot.expenses.any(
-                  (item) =>
-                      !item.deleted &&
-                      DateUtils.isSameDay(item.date, DateTime.now()),
+                  (item) => !item.deleted && IstTime.isToday(item.date),
                 ))
                   EmptyState(message: strings.text('noActivity')),
               ],
@@ -692,6 +691,8 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final sync = ref.watch(syncServiceProvider);
+    final setup = ref.watch(householdSetupProvider).value;
+    final setupRecord = setup?.record;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
       children: [
@@ -748,9 +749,10 @@ class SettingsPage extends ConsumerWidget {
                       title: Text(status.signedInEmail ?? 'Google Drive'),
                       subtitle: Text(
                         status.message ??
+                            setup?.syncHealth ??
                             (status.lastSyncedAt == null
                                 ? 'Not synced'
-                                : 'Synced ${DateFormat.jm().format(status.lastSyncedAt!)}'),
+                                : 'Synced ${IstTime.formatInstant(status.lastSyncedAt!)} IST'),
                       ),
                     ),
                     Row(
@@ -759,8 +761,8 @@ class SettingsPage extends ConsumerWidget {
                           child: FilledButton.icon(
                             onPressed: status.syncing
                                 ? null
-                                : () => _run(context, () async {
-                                    await sync.syncNow();
+                                : () => _run(context, ref, () async {
+                                    await sync.syncNow(setup: setupRecord);
                                     await ref
                                         .read(financeProvider.notifier)
                                         .refresh();
@@ -779,7 +781,10 @@ class SettingsPage extends ConsumerWidget {
                         const SizedBox(width: 8),
                         IconButton.filledTonal(
                           tooltip: 'Invite family member',
-                          onPressed: () => _invite(context, sync),
+                          onPressed:
+                              setupRecord?.role == HouseholdSetupRole.owner
+                              ? () => _invite(context, ref, sync)
+                              : null,
                           icon: const Icon(LucideIcons.userPlus),
                         ),
                       ],
@@ -805,6 +810,7 @@ class SettingsPage extends ConsumerWidget {
           subtitle: const Text('Export and share a password-protected copy'),
           onTap: () => _run(
             context,
+            ref,
             ref.read(backupServiceProvider).createAndShareBackup,
           ),
         ),
@@ -812,17 +818,36 @@ class SettingsPage extends ConsumerWidget {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(LucideIcons.history),
           title: const Text('Restore latest local backup'),
-          onTap: () => _run(context, () async {
+          onTap: () => _run(context, ref, () async {
             await ref.read(backupServiceProvider).restoreLatestBackup();
             await ref.read(financeProvider.notifier).refresh();
           }),
         ),
-        const Divider(height: 32),
-        const ListTile(
+        ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(child: Icon(LucideIcons.crown)),
-          title: Text('Family Owner'),
-          subtitle: Text('Owner • Local profile'),
+          leading: const Icon(LucideIcons.unplug),
+          title: const Text('Reconnect or change household'),
+          subtitle: const Text(
+            'Locks finance screens until Google setup succeeds again',
+          ),
+          onTap: () => ref.read(householdSetupProvider.notifier).reset(),
+        ),
+        const Divider(height: 32),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(
+            child: Icon(
+              setupRecord?.role == HouseholdSetupRole.owner
+                  ? LucideIcons.crown
+                  : LucideIcons.user,
+            ),
+          ),
+          title: Text(
+            setupRecord?.role == HouseholdSetupRole.owner
+                ? 'Family Owner'
+                : 'Family Member',
+          ),
+          subtitle: Text(setupRecord?.email ?? 'Local profile'),
         ),
       ],
     );
@@ -830,6 +855,7 @@ class SettingsPage extends ConsumerWidget {
 
   Future<void> _run(
     BuildContext context,
+    WidgetRef ref,
     Future<void> Function() action,
   ) async {
     try {
@@ -839,16 +865,23 @@ class SettingsPage extends ConsumerWidget {
           context,
         ).showSnackBar(const SnackBar(content: Text('Completed successfully')));
       }
-    } catch (error) {
+    } on Object catch (error) {
+      final failure = SyncFailure.from(error, operation: 'app action');
+      if (failure.invalidatesCompletedSetup) {
+        await ref
+            .read(householdSetupProvider.notifier)
+            .lockAfterRevocation(failure);
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(failure.userMessage)));
       }
     }
   }
 
   Future<void> _invite(
     BuildContext context,
+    WidgetRef ref,
     GoogleSheetsSyncService sync,
   ) async {
     final controller = TextEditingController();
@@ -874,7 +907,7 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
     if (email != null && email.contains('@') && context.mounted) {
-      await _run(context, () => sync.shareWith(email));
+      await _run(context, ref, () => sync.shareWith(email));
     }
   }
 }
@@ -906,7 +939,7 @@ class _EntryFormState extends ConsumerState<EntryForm> {
   final _notes = TextEditingController();
   String _category = 'Food';
   String _paymentMode = 'UPI';
-  DateTime _date = DateTime.now();
+  DateTime _date = IstTime.dateOnly(IstTime.now());
   bool _saving = false;
 
   @override
@@ -1046,7 +1079,7 @@ class _EntryFormState extends ConsumerState<EntryForm> {
       context: context,
       initialDate: _date,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      lastDate: IstTime.now().add(const Duration(days: 3650)),
     );
     if (value != null) setState(() => _date = value);
   }
@@ -1083,7 +1116,7 @@ class _EntryFormState extends ConsumerState<EntryForm> {
           await controller.addBudget(
             category: _category,
             limitMinor: rupeesToMinor(_amount.text),
-            month: DateFormat('yyyy-MM').format(DateTime.now()),
+            month: DateFormat('yyyy-MM').format(IstTime.now()),
           );
       }
       if (mounted) Navigator.pop(context);

@@ -32,7 +32,8 @@ device ID as deterministic tie-breakers.
 ### Google sync
 
 Create a Google Cloud project, enable Google Sheets API and Google Drive API,
-configure the OAuth consent screen, then create:
+configure the OAuth consent screen (including every tester under **Test
+users** while publishing status is Testing), then create:
 
 - an Android OAuth client for package `com.madhav.family_finance_app`, with the
   signing certificate SHA-1 and SHA-256 fingerprints; and
@@ -49,9 +50,28 @@ An OAuth client ID identifies the app and is not a client secret. Never pass or
 commit a client secret. Downloaded credentials, signing keys,
 `google-services.json`, local databases, and backups are ignored.
 
-The owner creates the household spreadsheet on first sync and can invite
-Google accounts from Settings. In-app roles are a convenience boundary only:
-any account with direct editor access can modify the Sheet outside the app.
+The required first-launch setup offers two paths:
+
+- **Owner / Create:** sign in with the owner's Google account, create the
+  app-managed household Sheet, optionally share it with each member's Google
+  email, and complete the initial sync.
+- **Member / Join:** sign in with that member's own Google account and open an
+  app-created Sheet link or ID that the owner explicitly shared.
+
+An Android emulator/device must have a Google account added in Android Settings
+before sign-in can present an account credential. In-app roles are a convenience
+boundary only: any account with direct editor access can modify the Sheet
+outside the app.
+
+After setup, temporary network outages do not block local finance features.
+Revoked account permissions or lost Sheet access require setup to be repaired.
+
+### Finance time zone
+
+Finance calendar dates are stored as date-only values. Monthly boundaries,
+"today", EMI reminders, displayed sync times, and migration of legacy timestamp
+dates use India Standard Time (`Asia/Kolkata`, UTC+05:30). Audit and sync
+instants remain stored in UTC.
 
 ## Security notes
 
