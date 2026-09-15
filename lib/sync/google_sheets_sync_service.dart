@@ -30,6 +30,9 @@ class GoogleSheetsSyncService {
   final AppDatabase database;
   static const _storage = FlutterSecureStorage();
   static const _spreadsheetKey = 'household_spreadsheet_id';
+  static const _serverClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+  );
   static const _scopes = [
     sheets.SheetsApi.spreadsheetsScope,
     drive.DriveApi.driveFileScope,
@@ -113,7 +116,9 @@ class GoogleSheetsSyncService {
 
   Future<void> initialize() async {
     if (_initialized) return;
-    await _googleSignIn.initialize();
+    await _googleSignIn.initialize(
+      serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
+    );
     _initialized = true;
     final spreadsheetId = await _storage.read(key: _spreadsheetKey);
     _emit(SyncStatus(spreadsheetId: spreadsheetId));

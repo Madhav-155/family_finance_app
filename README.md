@@ -32,11 +32,21 @@ device ID as deterministic tie-breakers.
 ### Google sync
 
 Create a Google Cloud project, enable Google Sheets API and Google Drive API,
-configure the OAuth consent screen, and create an Android OAuth client for
-package `com.madhav.family_finance_app`. Register the signing certificate SHA-1
-and SHA-256 fingerprints. Keep downloaded credentials and signing keys outside
-Git; `google-services.json`, keystores, local databases, and backups are
-ignored.
+configure the OAuth consent screen, then create:
+
+- an Android OAuth client for package `com.madhav.family_finance_app`, with the
+  signing certificate SHA-1 and SHA-256 fingerprints; and
+- a Web OAuth client used as Android's server client ID.
+
+Run the configured app with:
+
+```shell
+flutter run --dart-define=GOOGLE_SERVER_CLIENT_ID=your-web-client-id
+```
+
+An OAuth client ID identifies the app and is not a client secret. Never pass or
+commit a client secret. Downloaded credentials, signing keys,
+`google-services.json`, local databases, and backups are ignored.
 
 The owner creates the household spreadsheet on first sync and can invite
 Google accounts from Settings. In-app roles are a convenience boundary only:
