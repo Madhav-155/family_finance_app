@@ -11,7 +11,6 @@ import '../../../l10n/app_strings.dart';
 import '../../../services/notification_service.dart';
 import '../../../shared/domain/finance_models.dart';
 import '../../../shared/providers/app_providers.dart';
-import '../../../sync/google_sheets_sync_service.dart';
 import '../../../sync/sync_contracts.dart';
 
 enum EntryKind { expense, income, emi, budget }
@@ -30,8 +29,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final titles = [
-      strings.text('dashboard'),
-      strings.text('transactions'),
+      strings.text('home'),
+      strings.text('history'),
       strings.text('emis'),
       strings.text('reports'),
       strings.text('settings'),
@@ -357,7 +356,7 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
-              ...snapshot.budgets.where((item) => !item.deleted).map((budget) {
+              ...snapshot.currentMonthBudgets.map((budget) {
                 final spent = snapshot.categoryTotals[budget.category] ?? 0;
                 final progress = budget.limitMinor == 0
                     ? 0.0
@@ -412,6 +411,8 @@ class ExpenseTile extends ConsumerWidget {
       child: const Icon(LucideIcons.trash2),
     ),
     child: ListTile(
+      onTap: () =>
+          showEntrySheet(context, ref, EntryKind.expense, expense: expense),
       contentPadding: EdgeInsets.zero,
       leading: const CircleAvatar(child: Icon(LucideIcons.receipt)),
       title: Text(expense.category),
@@ -447,6 +448,8 @@ class IncomeTile extends ConsumerWidget {
       child: const Icon(LucideIcons.trash2),
     ),
     child: ListTile(
+      onTap: () =>
+          showEntrySheet(context, ref, EntryKind.income, income: income),
       contentPadding: EdgeInsets.zero,
       leading: const CircleAvatar(child: Icon(LucideIcons.wallet)),
       title: Text(income.source),
@@ -534,9 +537,13 @@ class EmiPage extends ConsumerWidget {
                             ),
                             if (!emi.paid)
                               TextButton(
-                                onPressed: () => ref
-                                    .read(financeProvider.notifier)
-                                    .markEmiPaid(emi),
+                                onPressed: () async {
+                                  await ref
+                                      .read(financeProvider.notifier)
+                                      .markEmiPaid(emi);
+                                  await NotificationService.instance
+                                      .cancelEmiReminder(emi);
+                                },
                                 child: const Text('Mark paid'),
                               ),
                           ],
@@ -806,8 +813,10 @@ class SettingsPage extends ConsumerWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(LucideIcons.fileLock2),
-          title: const Text('Create encrypted backup'),
-          subtitle: const Text('Export and share a password-protected copy'),
+          title: const Text('Create encrypted device backup'),
+          subtitle: const Text(
+            'Protected by this installation’s device key; keep a local copy',
+          ),
           onTap: () => _run(
             context,
             ref,
@@ -866,15 +875,20 @@ class SettingsPage extends ConsumerWidget {
         ).showSnackBar(const SnackBar(content: Text('Completed successfully')));
       }
     } on Object catch (error) {
-      final failure = SyncFailure.from(error, operation: 'app action');
-      if (failure.invalidatesCompletedSetup) {
+      final failure = error is SyncFailure ? error : null;
+      if (failure?.invalidatesCompletedSetup ?? false) {
         await ref
             .read(householdSetupProvider.notifier)
-            .lockAfterRevocation(failure);
+            .lockAfterRevocation(failure!);
       }
       if (context.mounted) {
+        final message = switch (error) {
+          SyncFailure failure => failure.userMessage,
+          StateError stateError => stateError.message,
+          _ => 'This action could not be completed. Please try again.',
+        };
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failure.userMessage)));
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     }
   }
@@ -882,7 +896,7 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _invite(
     BuildContext context,
     WidgetRef ref,
-    GoogleSheetsSyncService sync,
+    FamilySyncService sync,
   ) async {
     final controller = TextEditingController();
     final email = await showDialog<String>(
@@ -915,18 +929,22 @@ class SettingsPage extends ConsumerWidget {
 Future<void> showEntrySheet(
   BuildContext context,
   WidgetRef ref,
-  EntryKind kind,
-) => showModalBottomSheet<void>(
+  EntryKind kind, {
+  Expense? expense,
+  IncomeEntry? income,
+}) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  builder: (context) => EntryForm(kind: kind),
+  builder: (context) => EntryForm(kind: kind, expense: expense, income: income),
 );
 
 class EntryForm extends ConsumerStatefulWidget {
-  const EntryForm({super.key, required this.kind});
+  const EntryForm({super.key, required this.kind, this.expense, this.income});
 
   final EntryKind kind;
+  final Expense? expense;
+  final IncomeEntry? income;
 
   @override
   ConsumerState<EntryForm> createState() => _EntryFormState();
@@ -942,6 +960,26 @@ class _EntryFormState extends ConsumerState<EntryForm> {
   DateTime _date = IstTime.dateOnly(IstTime.now());
   bool _saving = false;
 
+  bool get _editing => widget.expense != null || widget.income != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final expense = widget.expense;
+    final income = widget.income;
+    if (expense != null) {
+      _amount.text = (expense.amountMinor / 100).toStringAsFixed(2);
+      _category = expense.category;
+      _paymentMode = expense.paymentMode;
+      _date = expense.date;
+      _notes.text = expense.notes;
+    } else if (income != null) {
+      _amount.text = (income.amountMinor / 100).toStringAsFixed(2);
+      _name.text = income.source;
+      _date = income.receivedDate;
+    }
+  }
+
   @override
   void dispose() {
     _amount.dispose();
@@ -951,8 +989,8 @@ class _EntryFormState extends ConsumerState<EntryForm> {
   }
 
   String get _title => switch (widget.kind) {
-    EntryKind.expense => 'Add expense',
-    EntryKind.income => 'Add income',
+    EntryKind.expense => _editing ? 'Edit expense' : 'Add expense',
+    EntryKind.income => _editing ? 'Edit income' : 'Add income',
     EntryKind.emi => 'Add EMI',
     EntryKind.budget => 'Set monthly budget',
   };
@@ -1091,20 +1129,45 @@ class _EntryFormState extends ConsumerState<EntryForm> {
     try {
       switch (widget.kind) {
         case EntryKind.expense:
-          await controller.addExpense(
-            amountMinor: rupeesToMinor(_amount.text),
-            category: _category,
-            paidBy: 'Family Owner',
-            paymentMode: _paymentMode,
-            date: _date,
-            notes: _notes.text.trim(),
-          );
+          final expense = widget.expense;
+          if (expense == null) {
+            await controller.addExpense(
+              amountMinor: rupeesToMinor(_amount.text),
+              category: _category,
+              paidBy:
+                  ref.read(householdSetupProvider).value?.record?.email ??
+                  'Local user',
+              paymentMode: _paymentMode,
+              date: _date,
+              notes: _notes.text.trim(),
+            );
+          } else {
+            await controller.updateExpense(
+              expense,
+              amountMinor: rupeesToMinor(_amount.text),
+              category: _category,
+              paidBy: expense.paidBy,
+              paymentMode: _paymentMode,
+              date: _date,
+              notes: _notes.text.trim(),
+            );
+          }
         case EntryKind.income:
-          await controller.addIncome(
-            source: _name.text.trim(),
-            amountMinor: rupeesToMinor(_amount.text),
-            receivedDate: _date,
-          );
+          final income = widget.income;
+          if (income == null) {
+            await controller.addIncome(
+              source: _name.text.trim(),
+              amountMinor: rupeesToMinor(_amount.text),
+              receivedDate: _date,
+            );
+          } else {
+            await controller.updateIncome(
+              income,
+              source: _name.text.trim(),
+              amountMinor: rupeesToMinor(_amount.text),
+              receivedDate: _date,
+            );
+          }
         case EntryKind.emi:
           final emi = await controller.addEmi(
             loanName: _name.text.trim(),
@@ -1120,6 +1183,14 @@ class _EntryFormState extends ConsumerState<EntryForm> {
           );
       }
       if (mounted) Navigator.pop(context);
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save this entry. Please try again.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

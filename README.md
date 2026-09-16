@@ -63,6 +63,12 @@ before sign-in can present an account credential. In-app roles are a convenience
 boundary only: any account with direct editor access can modify the Sheet
 outside the app.
 
+The setup screen's internet note is informational, not a connectivity warning.
+Actual network, missing-account, OAuth package/SHA, test-user, disabled-API,
+revoked-access, and missing-Sheet failures are reported separately. Selecting an
+account but failing immediately afterward usually means the Android OAuth client
+does not match this build's package and signing SHA-1.
+
 After setup, temporary network outages do not block local finance features.
 Revoked account permissions or lost Sheet access require setup to be repaired.
 
@@ -73,12 +79,22 @@ Finance calendar dates are stored as date-only values. Monthly boundaries,
 dates use India Standard Time (`Asia/Kolkata`, UTC+05:30). Audit and sync
 instants remain stored in UTC.
 
+### Test strategy
+
+`flutter test` runs deterministic finance workflow, setup owner/member, failure
+classification, IST boundary, settings persistence, and widget tests without
+requiring real Google credentials. A real-account smoke test is still required
+for each signing certificate because Google validates the Android package and
+SHA fingerprint outside the app.
+
 ## Security notes
 
 The database key and backup key are generated independently and kept in Android
 secure storage. Financial records and access tokens must never be logged.
 Backups are AES-256-GCM encrypted. Before production release, configure a
 private release keystore and complete the Play data-safety and privacy forms.
+Current local backups use a device-held key and are intended for restoration by
+the same app installation.
 
 ## Current scope
 

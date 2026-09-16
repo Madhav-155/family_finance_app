@@ -74,6 +74,23 @@ void main() {
     expect(failure.userMessage, contains('Test users'));
   });
 
+  test('Android developer error identifies OAuth client mismatch', () {
+    final failure = SyncFailure.from(
+      Exception('ApiException: 10 DEVELOPER_ERROR'),
+    );
+
+    expect(failure.kind, SyncFailureKind.oauthMisconfigured);
+    expect(failure.userMessage, contains('Android OAuth client'));
+    expect(failure.userMessage, contains('SHA-1'));
+  });
+
+  test('Google status code 7 is classified as offline', () {
+    final failure = SyncFailure.from(Exception('ApiException statusCode: 7'));
+
+    expect(failure.kind, SyncFailureKind.offline);
+    expect(failure.invalidatesCompletedSetup, isFalse);
+  });
+
   test('setup record retains separate member Google identity', () {
     final record = SetupRecord(
       role: HouseholdSetupRole.member,

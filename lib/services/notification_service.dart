@@ -52,4 +52,9 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
   }
+
+  Future<void> cancelEmiReminder(Emi emi) async {
+    await initialize();
+    await _plugin.cancel(id: emi.id.hashCode.abs() % 2147483647);
+  }
 }

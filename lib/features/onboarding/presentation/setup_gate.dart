@@ -220,13 +220,14 @@ class _SetupLockedViewState extends ConsumerState<SetupLockedView> {
                           const Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(LucideIcons.wifiOff, size: 18),
+                              Icon(LucideIcons.info, size: 18),
                               SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'First-time setup needs internet. After setup, '
-                                  'temporary network outages never block local '
-                                  'finance access; changes queue for later sync.',
+                                  'Internet is used after you tap the sign-in '
+                                  'button to contact Google. This note does not '
+                                  'mean Wi-Fi is off. After setup, temporary '
+                                  'outages do not block local finance access.',
                                   style: TextStyle(fontSize: 12),
                                 ),
                               ),

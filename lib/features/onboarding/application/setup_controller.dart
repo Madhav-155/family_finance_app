@@ -58,6 +58,8 @@ final householdSetupProvider =
     );
 
 class HouseholdSetupController extends AsyncNotifier<HouseholdSetupState> {
+  int _validationGeneration = 0;
+
   @override
   Future<HouseholdSetupState> build() async {
     final record = await ref.read(setupStorageProvider).read();
@@ -132,7 +134,9 @@ class HouseholdSetupController extends AsyncNotifier<HouseholdSetupState> {
     );
     try {
       final record = await action();
+      if (!ref.mounted) return;
       await ref.read(setupStorageProvider).write(record);
+      if (!ref.mounted) return;
       state = AsyncData(
         HouseholdSetupState(
           record: record,
@@ -141,6 +145,7 @@ class HouseholdSetupController extends AsyncNotifier<HouseholdSetupState> {
         ),
       );
     } on Object catch (error) {
+      if (!ref.mounted) return;
       final failure = SyncFailure.from(error, operation: 'first-run setup');
       state = AsyncData(
         HouseholdSetupState(stage: SetupStage.chooseRole, error: failure),
@@ -152,12 +157,15 @@ class HouseholdSetupController extends AsyncNotifier<HouseholdSetupState> {
     SetupRecord record, {
     bool interactive = false,
   }) async {
+    final generation = ++_validationGeneration;
     try {
       await ref.read(syncServiceProvider).validateSetup(record);
+      if (!ref.mounted || generation != _validationGeneration) return;
       final validated = record.copyWith(
         lastValidatedAt: DateTime.now().toUtc(),
       );
       await ref.read(setupStorageProvider).write(validated);
+      if (!ref.mounted || generation != _validationGeneration) return;
       state = AsyncData(
         HouseholdSetupState(
           record: validated,
@@ -166,6 +174,7 @@ class HouseholdSetupController extends AsyncNotifier<HouseholdSetupState> {
         ),
       );
     } on Object catch (error) {
+      if (!ref.mounted || generation != _validationGeneration) return;
       final failure = SyncFailure.from(error, operation: 'setup validation');
       if (failure.kind == SyncFailureKind.offline) {
         state = AsyncData(

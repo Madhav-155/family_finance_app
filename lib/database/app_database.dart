@@ -6,9 +6,10 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../core/time/ist_time.dart';
+import '../shared/data/finance_repository.dart';
 import '../shared/domain/finance_models.dart';
 
-class AppDatabase {
+class AppDatabase implements FinanceRepository {
   AppDatabase._();
 
   static final AppDatabase instance = AppDatabase._();
@@ -19,6 +20,7 @@ class AppDatabase {
   static const syncedTables = ['expenses', 'income', 'emis', 'budgets'];
 
   Database? _database;
+  @override
   String deviceId = '';
 
   Future<Database> get database async {
@@ -236,6 +238,7 @@ class AppDatabase {
     'sync_state': 'pending',
   };
 
+  @override
   Future<FinanceSnapshot> loadSnapshot() async {
     final db = await database;
     final results = await Future.wait([
@@ -252,6 +255,7 @@ class AppDatabase {
     );
   }
 
+  @override
   Future<void> insertEntity(String table, JsonMap values) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -264,6 +268,35 @@ class AppDatabase {
     });
   }
 
+  @override
+  Future<void> updateEntity(
+    String table,
+    SyncEntity entity,
+    JsonMap values,
+  ) async {
+    if (!syncedTables.contains(table)) {
+      throw ArgumentError.value(table, 'table', 'Unsupported finance table');
+    }
+    final db = await database;
+    await db.transaction((txn) async {
+      final updated = <String, Object?>{
+        ...values,
+        'id': entity.id,
+        'household_id': entity.householdId,
+        'created_by': entity.createdBy,
+        'device_id': deviceId,
+        'created_at': entity.createdAt.toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'revision': entity.revision + 1,
+        'is_deleted': 0,
+        'sync_state': 'pending',
+      };
+      await txn.update(table, updated, where: 'id = ?', whereArgs: [entity.id]);
+      await _queue(txn, table, entity.id, 'upsert');
+    });
+  }
+
+  @override
   Future<void> markEmiPaid(Emi emi) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -282,6 +315,7 @@ class AppDatabase {
     });
   }
 
+  @override
   Future<void> deleteEntity(String table, SyncEntity entity) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -331,17 +365,36 @@ class AppDatabase {
   }
 
   Future<void> restoreData(Map<String, dynamic> data) async {
+    const restoreOrder = [
+      'households',
+      'users',
+      'memberships',
+      'categories',
+      ...syncedTables,
+    ];
+    final validated = <String, List<Map<String, dynamic>>>{};
+    for (final table in restoreOrder) {
+      final value = data[table];
+      if (value is! List) {
+        throw const FormatException('Backup is missing required finance data.');
+      }
+      validated[table] = value
+          .map(
+            (row) => row is Map
+                ? Map<String, dynamic>.from(row)
+                : throw const FormatException(
+                    'Backup contains an invalid database row.',
+                  ),
+          )
+          .toList();
+    }
     final db = await database;
     await db.transaction((txn) async {
-      for (final table in [
-        'memberships',
-        'categories',
-        ...syncedTables,
-        'users',
-        'households',
-      ]) {
-        final rows = (data[table] as List<dynamic>? ?? const []);
-        for (final row in rows.cast<Map<String, dynamic>>()) {
+      for (final table in restoreOrder.reversed) {
+        await txn.delete(table);
+      }
+      for (final table in restoreOrder) {
+        for (final row in validated[table]!) {
           await txn.insert(
             table,
             row,

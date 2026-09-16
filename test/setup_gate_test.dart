@@ -25,7 +25,7 @@ void main() {
     expect(find.text('Owner / Create'), findsOneWidget);
     expect(find.text('Member / Join'), findsOneWidget);
     expect(
-      find.textContaining('First-time setup needs internet'),
+      find.textContaining('This note does not mean Wi-Fi is off'),
       findsOneWidget,
     );
     expect(find.textContaining('direct editor access'), findsOneWidget);

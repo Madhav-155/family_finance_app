@@ -248,6 +248,16 @@ class FinanceSnapshot {
   bool _thisMonth(DateTime date) =>
       IstTime.isCurrentMonth(date, nowInstant: nowInstant);
 
+  String get currentMonth {
+    final current = nowInstant == null
+        ? IstTime.now()
+        : IstTime.fromInstant(nowInstant!);
+    return DateFormat('yyyy-MM').format(current);
+  }
+
+  Iterable<Budget> get currentMonthBudgets =>
+      budgets.where((item) => !item.deleted && item.month == currentMonth);
+
   int get monthlyExpenses => expenses
       .where((item) => !item.deleted && _thisMonth(item.date))
       .fold(0, (sum, item) => sum + item.amountMinor);
@@ -260,7 +270,11 @@ class FinanceSnapshot {
       .where((item) => !item.deleted && !item.paid && _thisMonth(item.dueDate))
       .fold(0, (sum, item) => sum + item.amountMinor);
 
-  int get moneyLeft => monthlyIncome - monthlyExpenses - emiDue;
+  int get monthlyEmiPayments => emis
+      .where((item) => !item.deleted && _thisMonth(item.dueDate))
+      .fold(0, (sum, item) => sum + item.amountMinor);
+
+  int get moneyLeft => monthlyIncome - monthlyExpenses - monthlyEmiPayments;
 
   Map<String, int> get categoryTotals {
     final totals = <String, int>{};

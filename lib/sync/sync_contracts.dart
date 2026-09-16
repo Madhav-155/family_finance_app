@@ -7,6 +7,24 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 enum HouseholdSetupRole { owner, member }
 
+class SyncStatus {
+  const SyncStatus({
+    this.signedInEmail,
+    this.spreadsheetId,
+    this.lastSyncedAt,
+    this.syncing = false,
+    this.message,
+    this.failure,
+  });
+
+  final String? signedInEmail;
+  final String? spreadsheetId;
+  final DateTime? lastSyncedAt;
+  final bool syncing;
+  final String? message;
+  final SyncFailure? failure;
+}
+
 class SetupRecord {
   const SetupRecord({
     required this.role,
@@ -75,6 +93,24 @@ class SetupStorage {
       _storage.write(key: _recordKey, value: jsonEncode(record.toJson()));
 
   Future<void> clear() => _storage.delete(key: _recordKey);
+}
+
+abstract interface class FamilySyncService {
+  Stream<SyncStatus> get statuses;
+  SyncStatus get status;
+  String? get signedInEmail;
+
+  Future<void> initialize();
+  Future<SyncStatus> signIn({String? expectedEmail});
+  Future<void> signOut();
+  Future<SyncStatus> syncNow({SetupRecord? setup});
+  Future<SetupRecord> createOwnerHousehold({
+    required String householdName,
+    List<String> memberEmails = const [],
+  });
+  Future<SetupRecord> joinMemberHousehold(String spreadsheetInput);
+  Future<void> validateSetup(SetupRecord setup);
+  Future<void> shareWith(String email);
 }
 
 enum SyncFailureKind {
@@ -146,7 +182,10 @@ class SyncFailure implements Exception {
     if (text.contains('socketexception') ||
         text.contains('failed host lookup') ||
         text.contains('connection timed out') ||
-        text.contains('network_error')) {
+        text.contains('network_error') ||
+        text.contains('network error') ||
+        text.contains('statuscode: 7') ||
+        text.contains('status code 7')) {
       return SyncFailure(
         kind: SyncFailureKind.offline,
         userMessage: 'No network connection. Local data remains usable; reconnect and retry sync.',
@@ -163,7 +202,9 @@ class SyncFailure implements Exception {
     }
     if (text.contains('access_denied') ||
         text.contains('not a test user') ||
-        text.contains('403: access blocked')) {
+        text.contains('403: access blocked') ||
+        text.contains('org_internal') ||
+        text.contains('app is blocked')) {
       return SyncFailure(
         kind: SyncFailureKind.testUserDenied,
         userMessage: 'This Google account is not allowed to use the OAuth test app. Add it under OAuth consent screen → Test users.',
@@ -172,7 +213,8 @@ class SyncFailure implements Exception {
     }
     if (text.contains('api has not been used') ||
         text.contains('accessnotconfigured') ||
-        text.contains('service_disabled')) {
+        text.contains('service_disabled') ||
+        text.contains('service disabled')) {
       return SyncFailure(
         kind: SyncFailureKind.apiDisabled,
         userMessage: 'Enable both Google Sheets API and Google Drive API for the configured Cloud project, then retry.',
@@ -187,6 +229,19 @@ class SyncFailure implements Exception {
         kind: SyncFailureKind.accessRevoked,
         userMessage: 'Google access has expired or was revoked. Reconnect your account to restore family sync.',
         diagnostic: '$operation: authorization revoked',
+      );
+    }
+    if (text.contains('developer_error') ||
+        text.contains('statuscode: 10') ||
+        text.contains('status code 10') ||
+        text.contains('client configuration') ||
+        text.contains('provider configuration') ||
+        text.contains('server client id') ||
+        text.contains('oauth client')) {
+      return SyncFailure(
+        kind: SyncFailureKind.oauthMisconfigured,
+        userMessage: 'Google sign-in is not configured for this app build. In Google Cloud, add an Android OAuth client for package com.madhav.family_finance_app with this build’s SHA-1, and keep the Web client ID in the same project.',
+        diagnostic: '$operation: OAuth client configuration mismatch',
       );
     }
     if (text.contains('404') ||

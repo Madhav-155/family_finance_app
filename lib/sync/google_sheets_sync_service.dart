@@ -10,25 +10,7 @@ import 'package:googleapis/sheets/v4.dart' as sheets;
 import '../database/app_database.dart';
 import 'sync_contracts.dart';
 
-class SyncStatus {
-  const SyncStatus({
-    this.signedInEmail,
-    this.spreadsheetId,
-    this.lastSyncedAt,
-    this.syncing = false,
-    this.message,
-    this.failure,
-  });
-
-  final String? signedInEmail;
-  final String? spreadsheetId;
-  final DateTime? lastSyncedAt;
-  final bool syncing;
-  final String? message;
-  final SyncFailure? failure;
-}
-
-class GoogleSheetsSyncService {
+class GoogleSheetsSyncService implements FamilySyncService {
   GoogleSheetsSyncService(this.database);
 
   final AppDatabase database;
@@ -111,8 +93,11 @@ class GoogleSheetsSyncService {
   bool _initialized = false;
   SyncStatus _status = const SyncStatus();
 
+  @override
   Stream<SyncStatus> get statuses => _statusController.stream;
+  @override
   SyncStatus get status => _status;
+  @override
   String? get signedInEmail => _account?.email;
 
   void _emit(SyncStatus value) {
@@ -120,8 +105,16 @@ class GoogleSheetsSyncService {
     _statusController.add(value);
   }
 
+  @override
   Future<void> initialize() async {
     if (_initialized) return;
+    if (!_serverClientId.endsWith('.apps.googleusercontent.com')) {
+      throw const SyncFailure(
+        kind: SyncFailureKind.oauthMisconfigured,
+        userMessage: 'This app build has an invalid Google Web client ID. Install a correctly configured build or contact the app owner.',
+        diagnostic: 'initialize: GOOGLE_SERVER_CLIENT_ID is invalid',
+      );
+    }
     await _googleSignIn.initialize(
       serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
     );
@@ -164,6 +157,7 @@ class GoogleSheetsSyncService {
     }
   }
 
+  @override
   Future<SyncStatus> signIn({String? expectedEmail}) async {
     try {
       await initialize();
@@ -189,6 +183,7 @@ class GoogleSheetsSyncService {
     }
   }
 
+  @override
   Future<void> signOut() async {
     await initialize();
     await _googleSignIn.signOut();
@@ -196,6 +191,7 @@ class GoogleSheetsSyncService {
     _emit(SyncStatus(spreadsheetId: _status.spreadsheetId));
   }
 
+  @override
   Future<SyncStatus> syncNow({SetupRecord? setup}) async {
     await initialize();
     final spreadsheetId = setup?.spreadsheetId ?? _status.spreadsheetId;
@@ -251,6 +247,7 @@ class GoogleSheetsSyncService {
     return _status;
   }
 
+  @override
   Future<SetupRecord> createOwnerHousehold({
     required String householdName,
     List<String> memberEmails = const [],
@@ -298,6 +295,7 @@ class GoogleSheetsSyncService {
     }
   }
 
+  @override
   Future<SetupRecord> joinMemberHousehold(String spreadsheetInput) async {
     try {
       final spreadsheetId = parseSpreadsheetId(spreadsheetInput);
@@ -340,6 +338,7 @@ class GoogleSheetsSyncService {
     }
   }
 
+  @override
   Future<void> validateSetup(SetupRecord setup) async {
     try {
       await initialize();
@@ -482,6 +481,7 @@ class GoogleSheetsSyncService {
     }
   }
 
+  @override
   Future<void> shareWith(String email) async {
     try {
       final id = _status.spreadsheetId;
